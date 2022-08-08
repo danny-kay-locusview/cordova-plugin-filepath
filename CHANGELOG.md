@@ -1,3 +1,7 @@
+# 1.6.1
+* [#1](https://github.com/locusview/cordova-plugin-filepath/pull/1)
+
+
 # 1.6.0
 
 * [#70](https://github.com/hiddentao/cordova-plugin-filepath/pull/70)
