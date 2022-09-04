@@ -1,5 +1,7 @@
 package com.hiddentao.cordova.filepath;
 
+import android.content.Intent;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.Manifest;
 import android.content.ContentUris;
@@ -13,6 +15,8 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
+
+import androidx.annotation.RequiresApi;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -40,17 +44,28 @@ public class FilePath extends CordovaPlugin {
     private static final int GET_CLOUD_PATH_ERROR_CODE = 1;
     private static final String GET_CLOUD_PATH_ERROR_ID = "cloud";
 
-    private static final int RC_READ_EXTERNAL_STORAGE = 5;
-
     private static CallbackContext callback;
     private static String uriStr;
 
     public static final int READ_REQ_CODE = 0;
+    public static final int MANAGE_REQ_CODE = 11;
 
     public static final String READ = Manifest.permission.READ_EXTERNAL_STORAGE;
+    public static final String MANAGE = Manifest.permission.MANAGE_EXTERNAL_STORAGE;
 
     protected void getReadPermission(int requestCode) {
         PermissionHelper.requestPermission(this, requestCode, READ);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.R)
+    protected void getManagePermission(int requestCode) {
+      Context appContext = this.cordova.getActivity().getApplicationContext();
+      Intent intent = new Intent();
+      intent.setAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+      intent.addCategory(Intent.CATEGORY_DEFAULT);
+      intent.setData(Uri.parse(String.format("package:%s", appContext.getPackageName())));
+      cordova.setActivityResultCallback(this);
+      cordova.startActivityForResult(this, intent, requestCode);
     }
 
     public void initialize(CordovaInterface cordova, final CordovaWebView webView) {
@@ -72,7 +87,14 @@ public class FilePath extends CordovaPlugin {
 
         if (action.equals("resolveNativePath")) {
             if (PermissionHelper.hasPermission(this, READ)) {
-                resolveNativePath();
+              if (
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+                Environment.isExternalStorageManager()
+              ) {
+                  resolveNativePath();
+              } else {
+                getManagePermission(MANAGE_REQ_CODE);
+              }
             }
             else {
                 getReadPermission(READ_REQ_CODE);
@@ -138,6 +160,24 @@ public class FilePath extends CordovaPlugin {
         if (requestCode == READ_REQ_CODE) {
             resolveNativePath();
         }
+    }
+
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+      if (requestCode == MANAGE_REQ_CODE) {
+        try {
+          resolveNativePath();
+        } catch (JSONException e) {
+          JSONObject resultObj = new JSONObject();
+          try {
+            resultObj.put("code", 3);
+            resultObj.put("message", "Filesystem permission was denied.");
+          } catch (JSONException ex) {
+            Log.e(TAG, String.valueOf(ex));
+          }
+
+          this.callback.error(resultObj);
+        }
+      }
     }
 
 
